@@ -1,0 +1,14 @@
+obstacle_prob: 0.25
+num_rows: 10
+num_cols: 9
+
+num_robots: 1
+num_objects: 1
+
+num_actions: 4
+goal_reward: 30
+obstacle_reward: -10
+step_reward: -1
+gamma: 0.98
+
+num_clusters: 8

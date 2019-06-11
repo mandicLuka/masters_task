@@ -1,0 +1,6 @@
+README.md
+search_env.egg-info/PKG-INFO
+search_env.egg-info/SOURCES.txt
+search_env.egg-info/dependency_links.txt
+search_env.egg-info/requires.txt
+search_env.egg-info/top_level.txt
