@@ -1,74 +1,81 @@
 import mdptoolbox
 import numpy as np
 import mdptoolbox.example
-import search_env.envs.search_env as env
+import search_env.envs.multiagent_env as ma_env
+from search_env.envs.multiagent_env import FREE, OBSTACLE, ROBOT, OBJECT
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import pairwise_distances
 import matplotlib.pyplot as plt
 from copy import deepcopy
+from policies import greedy
+
+
 
 class POMDP:
-
-    def __init__(self, environment, params):
-        self.env = environment
+    def __init__(self, env, params):
+        self.env = env
         self.Q = None
         self.V = None    
 
-        self.num_rows = self.env.num_rows
-        self.num_cols = self.env.num_cols
+        self.num_rows = env.num_rows
+        self.num_cols = env.num_cols
 
         self.num_states = self.num_cols * self.num_rows
         self.shape = (self.num_rows, self.num_cols)
         self.num_actions = self.env.num_actions
         self.gamma = params["gamma"]
         self.params = params
-        self.num_objects = self.env.num_objects
+        self.num_objects = env.num_objects
 
         # dict of dict (state x 2) measurementes for objects
         # and obstacles
         self.measurements = dict()
         for i in range(self.num_states):
             state = self.env.unravel_state(i)
-            self.measurements[state] = {env.OBJECT: [], \
-                                        env.OBSTACLE: []}
+            self.measurements[state] = {OBJECT: [], \
+                                        OBSTACLE: []}
         
         self.object_belief = np.ones(self.num_rows * self.num_cols)*0.5
         self.obstacle_belief = np.ones(self.num_rows * self.num_cols)*0.5
         self.visited = np.zeros((self.num_rows * self.num_cols), dtype="bool")
+        for robot in env.robots:
+            self.object_belief[self.env.ravel_state(robot.position)] = 0
+            self.obstacle_belief[self.env.ravel_state(robot.position)] = 0
+            self.visited[self.env.ravel_state(robot.position)] = True
 
-    def solve(self):
-        T, R = env.build_pomdp()
-        V = self.compute_V(T, R, max_iter=10000)
-        self.compute_Q(T, R, V)
+        self.clusters = np.zeros(self.params["num_clusters"])
+        self.cluster_num_samples = np.zeros(self.params["num_clusters"])
+        self.cluster_mean_belief = np.zeros(self.params["num_clusters"])
 
-    def compute_V(self, T, R, max_iter=10000):
+    def compute_V(self, T, R, max_iter=10):
         value_iteration = mdptoolbox.mdp.ValueIteration(T, R, self.gamma, max_iter=max_iter)
         value_iteration.run()
-        self.V = value_iteration.V
-        return self.V
+        V = np.array(value_iteration.V)
+        obstacles = self.env.find_on_map("obstacle")
+        for obstacle in obstacles:
+            V[self.env.ravel_state(obstacle.position)] = 0
+        return V, np.array(value_iteration.policy)
 
-    def compute_Q(self, T, R, V):
-        self.Q = np.zeros([self.num_states, self.num_actions], 'f')
-        for action in range(self.num_actions):
-            R_action_state = np.multiply(T[action], R[action]).sum(1) 
+    def get_optimal_action_for_robot(self, robot):
+        policy = greedy(self.env)
+        robot_goal_env = self.build_policy_env(robot, int(policy[robot]))
+        T, R = self.build_mdp(robot_goal_env)
+        V, robot_action_policy = self.compute_V(T, R)
+        # self.plot_V(V)
+        # self.plot_V(robot_action_policy)
+        # self.env.render()
+        robot_position = self.env.robots[robot].position
+        return int(robot_action_policy[self.env.ravel_state(robot_position)]), robot_goal_env
 
-        self.Q[:, action] = R_action_state + self.gamma * T[action].dot(V)
-        return self.Q
-
-
-    def build_pomdp(self): 
+    def build_mdp(self, env): 
         T = np.zeros((self.num_actions, self.num_states, self.num_states), 'f')
         R = np.zeros((self.num_actions, self.num_states, self.num_states), 'f') 
   
-        env.render()
         for state_num in range(self.num_states):
-            for action_num, action in enumerate(env.Action):
-
+            for action_num, action in enumerate(ma_env.Action):
                 state = env.unravel_state(state_num)
-                if env.is_out_of_bounds(state):
-                    continue
-                
-                ##### REWARDS AND TRANSITIONS#####
+
+                ##### REWARDS #####
                 if env.is_action_valid(state, action):
                     next_state = env.get_next_state_from_action(state, action)
                     next_state_num = env.ravel_state(next_state)
@@ -88,33 +95,37 @@ class POMDP:
                 T[action_num, state_num, next_state_num] = 1.0
         return T, R
 
-    def propagate_obs(self, state, action, obs):
-        self.visited[self.env.ravel_state(state)] = True
+    def propagate_obs(self, curr_state, action, obs):
+        self.visited[self.env.ravel_state(curr_state)] = True
         rel = self.get_obs_reliability(obs)
         for state in rel.keys():
-            
-            measurement = rel[state][env.OBJECT]
-            self.measurements[state][env.OBJECT].append(measurement)
-            measurement = rel[state][env.OBSTACLE]
-            self.measurements[state][env.OBSTACLE].append(measurement)
-        self.object_belief = self.get_belief(env.OBJECT)
-        self.obstacle_belief = self.get_belief(env.OBSTACLE)
-        X = np.zeros((self.num_states, 3))
+            measurement = rel[state][OBJECT]
+            self.measurements[state][OBJECT].append(measurement)
+            measurement = rel[state][OBSTACLE]
+            self.measurements[state][OBSTACLE].append(measurement)
+        self.object_belief = self.get_belief(OBJECT)
+        self.obstacle_belief = self.get_belief(OBSTACLE)
+
+        X = np.zeros((self.num_states-np.where(self.visited == True)[0].size, 3))
+        count = 0
         for i in range(self.num_states):
             if self.visited[i]:
                 continue
             state = self.env.unravel_state(i)
-            X[i] = np.array([state[0], state[1], 100*self.object_belief[i]])
+            X[count] = np.array([state[0], state[1], self.params["belief_scale"]*self.object_belief[i]])
+            count += 1
 
-        model = KMeans(n_clusters=8)
-        y = model.fit_predict(X)
-        a = model.cluster_centers_
+        model = KMeans(n_clusters=10)
+        model.fit(X)
+        self.clusters = np.array(model.cluster_centers_[:, :2], dtype='i')
         b = np.reshape(model.labels_, (1, -1))
-        num_samples_in_cluters = np.zeros(self.params["num_clusters"])
         for i in range(self.params["num_clusters"]):
-            temp = np.where(np.array(b) == i)
-            num_samples_in_cluters[i] = temp[0].size
-        plot_clusters(X, y, self.shape[0])
+            temp = np.where(b == i)
+            self.cluster_num_samples[i] = temp[0].size
+            self.cluster_mean_belief[i] = (X[temp[1], 2].sum())  \
+               / (self.params["belief_scale"] * self.cluster_num_samples[i])
+        
+        #plot_clusters(X, y, self.shape[0])
 
     def get_obs_reliability(self, obs):
         total_rel = dict()
@@ -134,14 +145,14 @@ class POMDP:
             if state not in total_rel.keys():
                 total_rel[state] = dict()
 
-            if int(o) == env.OBJECT:
-                total_rel[state][env.OBJECT] = state_rel
+            if int(o) == OBJECT:
+                total_rel[state][OBJECT] = state_rel
             else:
-                total_rel[state][env.OBJECT] = 1 - state_rel
-            if int(o) == env.OBSTACLE:
-                total_rel[state][env.OBSTACLE] = state_rel
+                total_rel[state][OBJECT] = 1 - state_rel
+            if int(o) == OBSTACLE:
+                total_rel[state][OBSTACLE] = state_rel
             else:
-                total_rel[state][env.OBSTACLE] = 1 - state_rel
+                total_rel[state][OBSTACLE] = 1 - state_rel
         return total_rel
 
     def get_belief(self, obj):
@@ -153,13 +164,25 @@ class POMDP:
                 a = 1 - (1 - np.array(self.measurements[state][obj])).prod()
                 b = np.array(self.measurements[state][obj]).prod()
                 if np.isclose(a , 1):
-                    belief[i] = a
+                    belief[i] = 1
                 elif np.isclose(b, 0):
-                    belief[i] = b
+                    belief[i] = 0
                 else:
                     belief[i] = (a+b)/2
         return belief
 
+    def build_policy_env(self, robot, goal):
+        grid = deepcopy(self.env.grid)
+        grid[grid == OBJECT] = FREE
+        grid[self.env.objects[goal].position] = OBJECT
+        grid[grid == ROBOT] = OBSTACLE
+        grid[self.env.robots[robot].position] = ROBOT
+        return ma_env.MultiagentEnv(self.params, grid)
+
+    def plot_V(self, V):
+        np.set_printoptions(precision=2)
+        for i in range(self.num_rows):
+            print(V[i*self.num_cols:(i+1)*self.num_cols])
 
 
 def plot_clusters(X, y, shape):

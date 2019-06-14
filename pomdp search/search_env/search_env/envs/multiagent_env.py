@@ -7,47 +7,67 @@ from queue import Queue
 import numpy as np
 from enum import IntEnum
 from collections import OrderedDict
-from pomdp import POMDP
 from sklearn.cluster import KMeans
+import pickle
 
 class Action(IntEnum):
+    """
+        Action enumeration. Environment supports 4 
+        actions: UP, LEFT, RIGHT and DOWN
+    """
     UP = 0
     LEFT = 1
     RIGHT = 2 
     DOWN = 3
 
 class Robot():
+    """
+        Base Robot class represents robot on map. For future work
+        to add different robots.
+    """
     def __init__(self,  position = (0, 0)):
         self.x = position[0]
         self.y = position[1]
         self.position = position
 
 class Object():
+    """
+        Base object class represents object on map. For future work
+        to add different objects.
+    """
     def __init__(self,  position = (0, 0)):
         self.x = position[0]
         self.y = position[1]
         self.position = position
 
+class Obstacle():
+    """
+        Base obstacle class.
+    """
+    def __init__(self,  position = (0, 0)):
+        self.x = position[0]
+        self.y = position[1]
+        self.position = position
+
+### TYPES OF CELLS ###
 FREE = 0
 OBSTACLE = 1
 ROBOT = 2
 OBJECT = 3
 
-class PomdpSearchEnv(Env):
-
+# TODO load robots, objects and other stuff from config
+class MultiagentEnv(Env):
     """
-        . - empty space
-        # - obstacle
-        R - robot
-        G - goal 
+        Environment used for multi-agent search mission.
+        The task is for N robots to find M objects on map.
     """
-    metadata = {
-        'render.modes': ['human', 'rgb_array'],
-        'video.frames_per_second' : 30
-    }
     def __init__(self, params, grid=None):
-
-        # TODO MAKE POSSIBLE FOR MULTIPLE ROBOTS
+        """
+            Can be created with given grid. If grid is None
+            create random grid with obstacle probability
+            given in params. Robots and goals are also randomly
+            placed on map.
+        """
         self.t = 0
         self.params = params
         self.num_rows = params['num_rows']
@@ -78,26 +98,44 @@ class PomdpSearchEnv(Env):
         if grid is None:
             self.init_robots_objects()
         else:
-            self.find_robots_and_objects()
+            self.robots = self.find_on_map("robot")
+            self.objects = self.find_on_map("object")
 
-
-        self.pomdp = POMDP(self, params)
         self.done = False
 
     def init_env(self):
         self.__init__(self.params)
 
-    def find_robots_and_objects(self):
-        self.robots = []
-        self.objects = []
+    def find_on_map(self, obj):
+        """Gets and prints the spreadsheet's header columns
+
+        Parameters
+        ----------
+        obj : "robot", "object" or "obstacle"
+            type of object to find
+       
+        Returns
+        -------
+        list
+            a list of all objects of type obj on map
+        """
+        objects = []
         for i in range(self.num_rows):
             for j in range(self.num_cols):
-                if self.grid[i, j] == ROBOT:
-                    self.robots.append(Robot((i, j)))
-                if self.grid[i, j] == OBJECT:
-                    self.objects.append(Object((i, j)))
+                if obj == "robot" and self.grid[i, j] == ROBOT:
+                    objects.append(Robot((i, j)))
+                if obj == "object" and self.grid[i, j] == OBJECT:
+                    objects.append(Object((i, j)))
+                if obj == "obstacle" and self.grid[i, j] == OBSTACLE:
+                    objects.append(Obstacle((i, j)))
+        return objects
 
     def init_robots_objects(self):
+        """Randomly place robots and objects on map.
+
+        This method ensures that every goal is reachable.
+        Number of robots and objects is loaded from params.
+        """
         free_states = np.nonzero((self.grid == FREE).flatten())[0]
 
         while True:
@@ -129,28 +167,22 @@ class PomdpSearchEnv(Env):
                     self.objects.append(Object(obj))
                 return 
 
-    def reset(self, orientations):
-        self.init_env()  
-        for i, orientation in enumerate(orientations):
-
-            if orientation == "UP":
-                state = (self.robots[i].x+1, self.robots[i].y)
-                return self.sample_observation(state, Action.UP)
-            elif orientation == "LEFT":
-                state = (self.robots[i].x, self.robots[i].y+1)
-                return self.sample_observation(state, Action.LEFT)
-            elif orientation == "RIGHT":
-                state = (self.robots[i], self.robots[i].y-1)
-                return self.sample_observation(state, Action.RIGHT)
-            elif orientation == "DOWN":
-                state = (self.robots[i].x-1, self.robots[i].y)
-                return self.sample_observation(state, Action.DOWN)
-            
-        assert False, "Wrong orientation"
-
-
     @staticmethod
     def generate_random_grid(rows, cols, obstacle_prob=0.25):
+        """Generate random grid with shape (rows, cols) 
+        with obstacle probability obstacle_prob
+
+        Parameters
+        ----------
+        rows : int
+            number of rows in grid
+        cols : int
+            number of cols in grid
+       
+        Returns
+        -------
+        grid : numpy array((rows, cols))
+        """
         grid = np.zeros((rows, cols), dtype='i') # all free
 
         rand_field = np.random.rand(rows, cols)
@@ -159,10 +191,33 @@ class PomdpSearchEnv(Env):
 
     @staticmethod
     def generate_empty_grid(rows, cols):
+        """Generate empty grid with shape (rows, cols)
+
+        Parameters
+        ----------
+        rows : int
+            number of rows in grid
+        cols : int
+            number of cols in grid
+       
+        Returns
+        -------
+        grid : numpy array((rows, cols))
+        """
         return np.zeros((rows, cols), dtype='i')
 
     @staticmethod
     def transform_grid(grid):
+        """Transforms grid to render style grid.
+
+        Parameters
+        ----------
+        grid : numpy array((rows, cols))
+       
+        Returns
+        -------
+        transformed_grid : numpy array((rows, cols))
+        """
         transformed_grid = np.zeros(grid.shape, dtype='c')
         transformed_grid[grid == FREE] = "."
         transformed_grid[grid == OBSTACLE] = "#"
@@ -188,7 +243,7 @@ class PomdpSearchEnv(Env):
                 for i, obj in enumerate(self.objects):
                     if obj.position == next_state:
                         del self.objects[i]
-                    break                
+                        break         
                 self.num_objects -= 1
                 if self.num_objects == 0:
                     self.done = True
@@ -402,16 +457,6 @@ class PomdpSearchEnv(Env):
         else:
             states["front"] = front
         return states
-
-    def generate_trajectories(self, env_trajs):
-        pomdp = POMDP(self, self.params)
-        self.render()
-        while not self.done:
-            action = int(input())
-            next_state, obs = self.do_action(self.robots[0], action)
-            pomdp.propagate_obs(next_state, action, obs)
-            self.render()
-            a = 5
 
     def render(self, mode='human'):
         grid = self.transform_grid(self.grid)

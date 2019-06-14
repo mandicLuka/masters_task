@@ -4,82 +4,82 @@ from argparse import ArgumentParser
 import sys, os
 import gym
 import random
-from yaml import safe_load as load_config
-from search_env.envs.search_env import Action
+from pomdp import POMDP
+from utils import load_params
+import pickle
 
-# TODO load maps from json
-MAPS = {
-    "prva":[
-    "#######",
-    "#R.#.G#",
-    "#..#..#",
-    "#..#..#",
-    "#..#..#",
-    "#.....#",
-    "#######"
-    ]
-}
-
-def create_dataset(path, rows, cols, num_envs, env_trajs, params):
-    """
-    :param path: path for data file. use separate folders for training and test data
-    :param rows: grid rows
-    :param cols: grid cols
-    :param num_env: number of environments in the dataset (grids)
-    :param env_trajs: number of trajectories per environment (different initial state, goal, initial belief)
-    :param params: path to dataset parameters
-
-    """
-
-    params = load_params(params)
-
-    # randomize seeds, set to previous value to determinize random numbers
-    np.random.seed()
-    random.seed()
-
-    
-
-    for env_i in range(num_envs):
-        print ("Generating %d. environment"%(env_i))
-        # grid domain object
-        domain = gym.make("search_env:pomdp-v0", params=params)
-        domain.generate_trajectories(env_trajs)
-
-    print ("Done.")
-
-def load_params(params_path: str):
-
-    if not os.path.isfile(params_path):
-        raise Exception("Could not find file " + params_path)
-
-    with open(params_path) as config_file:
-        params = load_config(config_file)
-    return params
+PARAMS_FILE_PATH = "dataset_params.yaml"
 
 def main():
-    parser = ArgumentParser(description='Generate search trajectories')
-    parser.add_argument('--dataset_folder', type=str, default="Datasets", help='Directory for datasets')
-    parser.add_argument('--params', type=str, default="dataset_params.yaml", help='File with dataset params')
-    parser.add_argument('--train', type=int, default=10000, help='Number of training environments')
-    parser.add_argument('--test', type=int, default=500, help='Number of test environments')
-    parser.add_argument('--X', type=int, default=20, help='Num rows in grid')
-    parser.add_argument('--Y', type=int, default=20, help='Num cols in grid')
-    parser.add_argument('--trajs', type=int, default=5,
-         help='Number of trajectories per environment in the training set. 5 by default.')
 
-    args = parser.parse_args()
-    dataset_folder = os.path.join(os.getcwd(), args.dataset_folder)
-    params = os.path.join(os.getcwd(), args.params)
+    params = load_params(PARAMS_FILE_PATH)
+
+    dataset_folder = os.path.join(os.getcwd(), params["dataset_folder"])
     if not os.path.isdir(dataset_folder): 
         os.mkdir(dataset_folder)
 
     # training data
-    create_dataset(os.path.join(dataset_folder, '/train/'), rows=args.X, cols=args.Y, \
-                    num_envs=args.train, env_trajs=args.trajs, params=params)
-
+    create_dataset(os.path.join(dataset_folder, 'train_greedy'), params["train_envs"], params=params)
     # test data
-    create_dataset(os.path.join(dataset_folder, '/test/'), rows=args.X, cols=args.Y, \
-                    num_envs=args.test, env_trajs=1, params=params)
+    create_dataset(os.path.join(dataset_folder, 'test_greedy'), params["test_envs"], params=params)
+
+    params["obstacle_prob"] = 0
+
+    # training data
+    create_dataset(os.path.join(dataset_folder, 'train_empty'), params["train_envs"], params=params)
+    # test data
+    create_dataset(os.path.join(dataset_folder, 'test_empty'), params["test_envs"], params=params)
+
+
+
+def create_dataset(dataset_folder, num_envs, params):
+
+    # randomize seeds, set to previous value to determinize random numbers
+    np.random.seed()
+    random.seed()
+    num_robots = params["num_robots"]
+    num_objects = params["num_objects"]
+    for env_i in range(num_envs):
+        print ("Generating %d. environment"%(env_i))
+        # grid domain object
+        if isinstance(num_robots, (list, )):
+            params["num_robots"] = random.choice(range(num_robots[0], num_robots[1]+1))
+        if isinstance(num_objects, (list, )):
+            params["num_objects"] = random.choice(range(num_objects[0], num_objects[1]+1))
+        env = gym.make("search_env:multiagent_env-v0", params=params)
+        trajs, belief = generate_trajectories(env)
+
+        if not os.path.isdir(dataset_folder): 
+            os.mkdir(dataset_folder)
+        with open(os.path.join(dataset_folder,"env"+str(env_i+1)), "wb") as f:
+            pickle.dump((trajs, belief), f)
+        
+    print ("Done.")
+
+def generate_trajectories(env):
+    robots = range(len(env.robots))
+    pomdp = POMDP(env, env.params)
+    
+    # self.render()
+    count = 0
+    trajs = dict(zip(list(robots), [[] for i in robots]))
+    belief = []
+    while not env.done and count < env.params["max_iter"]:   
+        belief.append((pomdp.object_belief, pomdp.obstacle_belief))     
+        for robot in robots:
+            action, robot_env = pomdp.get_optimal_action_for_robot(robot) # robot_env has only 1 robot and 1 goal
+            trajs[robot].append((robot_env.robots[0].position, action, robot_env.objects[0].position))
+            next_state, obs = env.do_action(env.robots[robot], action)    
+            if env.done:
+                break                
+            pomdp.propagate_obs(next_state, action, obs)
+            
+        count += 1
+        env.render()
+    
+    return trajs, belief
+
+
 
 if __name__ == "__main__":
     main()

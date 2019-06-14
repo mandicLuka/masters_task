@@ -1,1 +1,1 @@
-from search_env.envs.search_env import PomdpSearchEnv
+from search_env.envs.multiagent_env import MultiagentEnv
