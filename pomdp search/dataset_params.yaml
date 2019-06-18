@@ -12,7 +12,7 @@ num_objects: [1, 5]
 
 num_actions: 4
 goal_reward: 10
-obstacle_reward: -20
+obstacle_reward: -15
 visited_reward: -5
 step_reward: 1
 gamma: 0.98
@@ -20,5 +20,10 @@ max_iter: 500
 
 num_clusters: 8
 belief_scale: 50
+
+train_folder: "train_greedy"
+test_folder: "test_greedy"
+file_batch: 32
+num_epochs: 5
 
 

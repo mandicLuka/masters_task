@@ -39,7 +39,7 @@ def create_dataset(dataset_folder, num_envs, params):
     random.seed()
     num_robots = params["num_robots"]
     num_objects = params["num_objects"]
-    for env_i in range(num_envs):
+    for env_i in range(1484, num_envs):
         print ("Generating %d. environment"%(env_i))
         # grid domain object
         if isinstance(num_robots, (list, )):
@@ -60,12 +60,12 @@ def generate_trajectories(env):
     robots = range(len(env.robots))
     pomdp = POMDP(env, env.params)
     
-    # self.render()
+    env.render()
     count = 0
     trajs = dict(zip(list(robots), [[] for i in robots]))
     belief = []
     while not env.done and count < env.params["max_iter"]:   
-        belief.append((pomdp.object_belief, pomdp.obstacle_belief))     
+        belief.append((pomdp.object_belief, pomdp.obstacle_belief))   
         for robot in robots:
             action, robot_env = pomdp.get_optimal_action_for_robot(robot) # robot_env has only 1 robot and 1 goal
             trajs[robot].append((robot_env.robots[0].position, action, robot_env.objects[0].position))
