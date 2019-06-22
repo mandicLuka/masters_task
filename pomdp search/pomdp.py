@@ -1,8 +1,8 @@
 import mdptoolbox
 import numpy as np
 import mdptoolbox.example
-import search_env.envs.multiagent_env as ma_env
-from search_env.envs.multiagent_env import FREE, OBSTACLE, ROBOT, OBJECT
+import envs.multiagent_env as ma_env
+from envs.multiagent_env import FREE, OBSTACLE, ROBOT, OBJECT
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import pairwise_distances
 import matplotlib.pyplot as plt
@@ -61,13 +61,25 @@ class POMDP:
     def get_optimal_action_for_robot(self, robot):
         policy = greedy(self.env)
         robot_goal_env = self.build_policy_env(robot, int(policy[robot]))
-        T, R = self.build_mdp(robot_goal_env)
+        T, R = self.build_mdp(self.env)
         V, robot_action_policy = self.compute_V(T, R)
         # self.plot_V(V)
         # self.plot_V(robot_action_policy)
         # self.env.render()
         robot_position = self.env.robots[robot].position
-        return int(robot_action_policy[self.env.ravel_state(robot_position)]), robot_goal_env
+        s = self.env.ravel_state(robot_position)
+        action = int(robot_action_policy[s])
+        
+        next_V = 0
+        if self.env.is_action_valid(robot_position, action):
+            ns = self.env.ravel_state(self.env.get_next_state_from_action(robot_position, action))
+            reward = R[action, s, ns]
+            next_V = V[ns]
+        else:
+            reward = R[action, s, s]
+            next_V = V[s]
+        q = reward + self.gamma * next_V
+        return action, reward, q, robot_goal_env
 
     def build_mdp(self, env): 
         T = np.zeros((self.num_actions, self.num_states, self.num_states), 'f')

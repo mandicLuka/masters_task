@@ -23,7 +23,8 @@ belief_scale: 50
 
 train_folder: "train_greedy"
 test_folder: "test_greedy"
-file_batch: 32
-num_epochs: 5
+file_batch: 3200
+use_coords: True
+num_epochs: 2
 
 

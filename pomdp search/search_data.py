@@ -1,8 +1,7 @@
-import gym
+from envs.multiagent_env import MultiagentEnv
 import numpy as np
 from argparse import ArgumentParser
 import sys, os
-import gym
 import random
 from pomdp import POMDP
 from utils import load_params
@@ -19,7 +18,7 @@ def main():
         os.mkdir(dataset_folder)
 
     # training data
-    create_dataset(os.path.join(dataset_folder, 'train_greedy'), params["train_envs"], params=params)
+    #create_dataset(os.path.join(dataset_folder, 'train_greedy'), params["train_envs"], params=params)
     # test data
     create_dataset(os.path.join(dataset_folder, 'test_greedy'), params["test_envs"], params=params)
 
@@ -37,16 +36,10 @@ def create_dataset(dataset_folder, num_envs, params):
     # randomize seeds, set to previous value to determinize random numbers
     np.random.seed()
     random.seed()
-    num_robots = params["num_robots"]
-    num_objects = params["num_objects"]
-    for env_i in range(1484, num_envs):
+    for env_i in range(num_envs):
         print ("Generating %d. environment"%(env_i))
         # grid domain object
-        if isinstance(num_robots, (list, )):
-            params["num_robots"] = random.choice(range(num_robots[0], num_robots[1]+1))
-        if isinstance(num_objects, (list, )):
-            params["num_objects"] = random.choice(range(num_objects[0], num_objects[1]+1))
-        env = gym.make("search_env:multiagent_env-v0", params=params)
+        env = MultiagentEnv(params=params)
         trajs, belief = generate_trajectories(env)
 
         if not os.path.isdir(dataset_folder): 
@@ -64,12 +57,25 @@ def generate_trajectories(env):
     count = 0
     trajs = dict(zip(list(robots), [[] for i in robots]))
     belief = []
-    while not env.done and count < env.params["max_iter"]:   
-        belief.append((pomdp.object_belief, pomdp.obstacle_belief))   
+    reward = 0
+    while not env.done and count < env.params["max_iter"]: 
+        b = dict()
+        b["object_belief"] = pomdp.object_belief.reshape(pomdp.shape)
+        b["obstacle_belief"] = pomdp.obstacle_belief.reshape(pomdp.shape)
+        belief.append(b)
+
         for robot in robots:
-            action, robot_env = pomdp.get_optimal_action_for_robot(robot) # robot_env has only 1 robot and 1 goal
-            trajs[robot].append((robot_env.robots[0].position, action, robot_env.objects[0].position))
-            next_state, obs = env.do_action(env.robots[robot], action)    
+            action, reward, q, robot_env = pomdp.get_optimal_action_for_robot(robot) # robot_env has only 1 robot and 1 goal
+            step = dict()
+            step["robot"] = robot_env.robots[0].position
+            step["other_robots"] = env.get_all_robots_positions_excluding(robot)
+            step["action"] = action
+            step["reward"] = reward
+            step["q"] = q
+            step["goals"] = [o.position for o in pomdp.env.objects]
+            next_state, obs = env.do_action(env.robots[robot], action) 
+            step["obs"] = env.map_obs(obs)
+            trajs[robot].append(step)
             if env.done:
                 break                
             pomdp.propagate_obs(next_state, action, obs)
@@ -78,8 +84,6 @@ def generate_trajectories(env):
         env.render()
     
     return trajs, belief
-
-
 
 if __name__ == "__main__":
     main()
