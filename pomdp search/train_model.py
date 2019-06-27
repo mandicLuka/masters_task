@@ -20,23 +20,10 @@ def main():
     train_pipeline = DataPipeline(TRAIN_DIR, params)
 
     model = full_map_cnn(params)
-    model.compile(tf.train.AdamOptimizer(learning_rate=0.0001), loss='categorical_crossentropy', metrics=[action_acc, "mae"])
+    model.compile(tf.train.AdamOptimizer(learning_rate=0.02), loss='mse', metrics=["mae"])
     
-    shape = (params["num_rows"], params["num_cols"])
 
-
-    if bool(params["use_coords"]) == True:
-        i_channel = np.zeros(shape)
-        j_channel = np.zeros(shape)
-        rangi = np.linspace(0, 1, shape[0])*2 - 1
-        rangj = np.linspace(0, 1, shape[1])*2 - 1
-
-        for i in range(shape[1]):
-            i_channel[:, i] = rangi
-        for j in range(shape[0]):
-            j_channel[j] = rangj
-
-    best = 0
+    old = 0
     while train_pipeline.num_passed < params["num_epochs"]:
         cache, next_state = train_pipeline.get_next_batch()
         data = np.concatenate((np.array(cache["object_beliefs"])[..., np.newaxis],  \
@@ -44,32 +31,64 @@ def main():
                             np.array(cache["robots"])[..., np.newaxis], \
                             np.array(cache["other_robots"])[..., np.newaxis], \
                             np.array(cache["goals"])[..., np.newaxis]), axis=-1)
+        
 
-        if bool(params["use_coords"]) == True :
-            
-            tempi = np.vstack([i_channel[np.newaxis, ...]]*data.shape[0])
-            tempj = np.vstack([j_channel[np.newaxis, ...]]*data.shape[0])
-            data = np.concatenate((data, tempi[..., np.newaxis], \
-                                         tempj[..., np.newaxis]), axis=-1)
-            del tempi, tempj
-        if data.size == 0:
-            continue
+        next_data = np.concatenate((np.array(next_state["object_beliefs"])[..., np.newaxis],  \
+                            np.array(next_state["obstacle_beliefs"])[..., np.newaxis], \
+                            np.array(next_state["robots"])[..., np.newaxis], \
+                            np.array(next_state["other_robots"])[..., np.newaxis], \
+                            np.array(next_state["goals"])[..., np.newaxis]), axis=-1)
+
+        if bool(params["use_coords"]) == True :        
+            data = add_coords_to_data(data, params)
+            next_data = add_coords_to_data(next_data, params)
+
         indices = np.array(range(len(data)))
         np.random.shuffle(indices)
         data = data[indices]
-        #next_data = next_data[indices]
-        actions = np.array(cache['actions'])[indices]
+        next_data = next_data[indices]
         
-        #next_Q = model.predict(next_data)
-        #argmax_Q = np.argmax(next_Q, axis=-1)
-        #argmax_Q = np.argmax(model.predict(data))
-        labels = np.zeros((data.shape[0], params["num_actions"]))
-        indices = (range(data.shape[0]), actions)
-        labels[indices] = 1
-        a = model.fit(data, labels, validation_split=0.1)
+        actions = np.array(cache['actions'])[indices]
+        rewards = np.array(cache['rewards'])[indices]
+        rewards[rewards == 1] = 0 
+        #print(data[:2, :, :, 2])
+        #print(next_data[:2, :, :, 2])
+        #print(actions[:2])
+        #print(rewards[:2])
 
-        model.save_weights('greedy_weights_coords2')
-            
+        next_Q = model.predict(next_data)
+        argmax_Q = np.argmax(next_Q, axis = -1)
+        indices_Q = (range(data.shape[0]), next_state["actions"])
+        indices_A = (range(data.shape[0]), cache["actions"])
+        labels = model.predict(data)
+        labels[indices_A] = np.array(rewards, dtype="f") + \
+                          params["gamma"] * next_Q[indices_Q]
+        
+        a = model.fit(data, labels, validation_split=0.1)
+        print(model.predict(data[:5]))
+        if train_pipeline.num_passed > old:
+            old = train_pipeline.num_passed
+            model.save_weights("weights" + str(old))            
+
+ 
+def add_coords_to_data(data, params):
+    shape = (params["num_rows"], params["num_cols"])
+    i_channel = np.zeros(shape)
+    j_channel = np.zeros(shape)
+    rangi = np.linspace(0, 1, shape[0])*2 - 1
+    rangj = np.linspace(0, 1, shape[1])*2 - 1
+    for i in range(shape[1]):
+        i_channel[:, i] = rangi
+    for j in range(shape[0]):
+        j_channel[j] = rangj
+
+    tempi = np.vstack([i_channel[np.newaxis, ...]]*data.shape[0])
+    tempj = np.vstack([j_channel[np.newaxis, ...]]*data.shape[0])
+    data = np.concatenate((data, tempi[..., np.newaxis], \
+                                 tempj[..., np.newaxis]), axis=-1)
+    return data
+
+
 class DataPipeline:
 
     def __init__(self, path, params):
@@ -98,7 +117,7 @@ class DataPipeline:
                          "goals": [],
                          "actions": [],
                          "rewards": [],
-                         "qs": []}
+                         "optimal_actions": []}
         next_state = copy.deepcopy(current_state)
 
         for name in batch:     
@@ -117,12 +136,12 @@ class DataPipeline:
                         step_obstacles = np.zeros(shape)
                         step_actions = np.zeros(1)
                         step_rewards = np.zeros(1)
-                        step_q = np.zeros(1)
+                        step_optimal_action = np.zeros(1)
 
                         step_robots[state["robot"]] = 1
                         step_actions = state["action"]
                         step_rewards = state["reward"]
-                        step_q = state["q"] 
+                        step_optimal_action = state["optimal_action"] 
                         step_objects = object_belief
                         step_obstacles = obstacle_belief
                         for g in state["goals"]:
@@ -138,17 +157,17 @@ class DataPipeline:
                             current_state["goals"].append(step_goals)
                             current_state["actions"].append(step_actions)
                             current_state["rewards"].append(step_rewards)
-                            current_state["qs"].append(step_q)
+                            current_state["optimal_actions"].append(step_optimal_action)
                         if step > 0:
                             pass
-                            # next_state["robots"].append(step_robots)
-                            # next_state["other_robots"].append(step_other_robots)
-                            # next_state["object_beliefs"].append(step_objects)
-                            # next_state["obstacle_beliefs"].append(step_obstacles)
-                            # next_state["goals"].append(step_goals)
-                            # next_state["actions"].append(step_actions)
-                            # next_state["rewards"].append(step_rewards)
-                            # next_state["qs"].append(step_q)
+                            next_state["robots"].append(step_robots)
+                            next_state["other_robots"].append(step_other_robots)
+                            next_state["object_beliefs"].append(step_objects)
+                            next_state["obstacle_beliefs"].append(step_obstacles)
+                            next_state["goals"].append(step_goals)
+                            next_state["actions"].append(step_actions)
+                            next_state["rewards"].append(step_rewards)
+                            next_state["optimal_actions"].append(step_optimal_action)
 
         self.count += self.file_batch
         if self.reset:

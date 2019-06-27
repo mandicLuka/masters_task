@@ -9,6 +9,7 @@ import numpy as np
 from metrics import action_acc
 import gym
 from pomdp import POMDP
+from train_model import DataPipeline, add_coords_to_data
 
 TEST_DIR = os.path.join(os.getcwd(), "Datasets/test")
 
@@ -20,10 +21,10 @@ def main():
     
  
     model = full_map_cnn(params)
-    model.compile(tf.train.AdamOptimizer(), loss='mse', metrics=[action_acc, "mae"])
-    model.load_weights("greedy_weights")
+    model.compile(tf.train.AdamOptimizer(), loss='mse', metrics=["mae"])
+    model.load_weights("weights15")
 
-    online_test(model, params)
+    offline_test(model, params)
 
 
 
@@ -73,108 +74,12 @@ def offline_test(model, params):
                             np.array(cache["robots"])[..., np.newaxis], \
                             np.array(cache["other_robots"])[..., np.newaxis], \
                             np.array(cache["goals"])[..., np.newaxis]), axis = -1)
-
-        next_data = np.concatenate((np.array(next_state["object_beliefs"])[..., np.newaxis],  \
-                            np.array(next_state["obstacle_beliefs"])[..., np.newaxis], \
-                            np.array(next_state["robots"])[..., np.newaxis], \
-                            np.array(next_state["other_robots"])[..., np.newaxis], \
-                            np.array(next_state["goals"])[..., np.newaxis]), axis = -1)
         
+        if bool(params["use_coords"]):
+            data = add_coords_to_data(data, params)
 
-        next_Q = model.predict(next_data)
-        argmax_Q = np.argmax(next_Q, axis=-1)
-        labels = copy.deepcopy(next_Q)
-        indices = (range(argmax_Q.size), argmax_Q)
-        labels[indices] = cache["rewards"] + params["gamma"] * next_Q[indices]
-        print(model.predict(data))
-        print(cache["actions"])
-        print(model.evaluate(data, labels))
-        
-
-class DataPipeline:
-
-    def __init__(self, path, params):
-        self.path = path
-        self.listdir = os.listdir(path)
-        self.params = params
-        self.file_batch = self.params["file_batch"]
-        self.count = 0
-        self.num_passed = 0
-
-    def get_next_batch(self):
-        batch = []
-        if self.count + self.file_batch >= len(self.listdir) - 1:
-            batch = self.listdir[self.count:]
-            self.num_passed += 1
-            self.count = 0
-        else:
-            batch = self.listdir[self.count:self.count+self.file_batch]
-
-
-        shape = (self.params["num_rows"], self.params["num_cols"])
-        current_state = {"robots": [],
-                         "other_robots": [],
-                         "object_beliefs": [], 
-                         "obstacle_beliefs": [],
-                         "goals": [],
-                         "actions": [],
-                         "rewards": [],
-                         "qs": []}
-        next_state = copy.deepcopy(current_state)
-
-        for name in batch:     
-            with open(os.path.join(self.path, name), "rb") as f:
-                trajs, beliefs = pickle.load(f)
-                for j in trajs.keys():
-                    for step in range(len(trajs[j])):
-                        object_belief = beliefs[step]["object_belief"]
-                        obstacle_belief = beliefs[step]["obstacle_belief"]
-                        state = trajs[j][step]
-
-                        step_robots = np.zeros(shape)
-                        step_other_robots = np.zeros(shape)
-                        step_goals =  np.zeros(shape)
-                        step_objects = np.zeros(shape)
-                        step_obstacles = np.zeros(shape)
-                        step_actions = np.zeros(1)
-                        step_rewards = np.zeros(1)
-                        step_q = np.zeros(1)
-
-                        step_robots[state["robot"]] = 1
-                        step_actions = state["action"]
-                        step_rewards = state["reward"]
-                        step_q = state["q"] 
-                        step_objects = object_belief
-                        step_obstacles = obstacle_belief
-                        for g in state["goals"]:
-                            step_goals[g] = 1
-                        for r in state["other_robots"]:
-                            step_other_robots[r] = 1
-
-                        if step < len(trajs[j]) - 1:
-                            current_state["robots"].append(step_robots)
-                            current_state["other_robots"].append(step_other_robots)
-                            current_state["object_beliefs"].append(step_objects)
-                            current_state["obstacle_beliefs"].append(step_obstacles)
-                            current_state["goals"].append(step_goals)
-                            current_state["actions"].append(step_actions)
-                            current_state["rewards"].append(step_rewards)
-                            current_state["qs"].append(step_q)
-                        if step > 0:
-                            next_state["robots"].append(step_robots)
-                            next_state["other_robots"].append(step_other_robots)
-                            next_state["object_beliefs"].append(step_objects)
-                            next_state["obstacle_beliefs"].append(step_obstacles)
-                            next_state["goals"].append(step_goals)
-                            next_state["actions"].append(step_actions)
-                            next_state["rewards"].append(step_rewards)
-                            next_state["qs"].append(step_q)
-
-        self.count += self.file_batch
-
-        return current_state, next_state
-
-
+        pred_actions = np.argmax(model.predict(data), axis=-1)
+        print(action_acc(pred_actions, np.array(cache["optimal_actions"])))
 
 if __name__ == "__main__":
     main()

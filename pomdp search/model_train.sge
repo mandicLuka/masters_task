@@ -1,0 +1,6 @@
+#$ -N posao
+#$ -cwd
+#$ -pe gpu 1
+
+module load tensorflow/1-12-0-gpu 
+cuda-wrapper.sh python3.5 train_model.py

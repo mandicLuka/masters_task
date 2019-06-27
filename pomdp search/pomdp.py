@@ -8,7 +8,7 @@ from sklearn.metrics.pairwise import pairwise_distances
 import matplotlib.pyplot as plt
 from copy import deepcopy
 from policies import greedy
-
+import random
 
 
 class POMDP:
@@ -59,27 +59,30 @@ class POMDP:
         return V, np.array(value_iteration.policy)
 
     def get_optimal_action_for_robot(self, robot):
-        policy = greedy(self.env)
-        robot_goal_env = self.build_policy_env(robot, int(policy[robot]))
-        T, R = self.build_mdp(self.env)
-        V, robot_action_policy = self.compute_V(T, R)
-        # self.plot_V(V)
-        # self.plot_V(robot_action_policy)
-        # self.env.render()
         robot_position = self.env.robots[robot].position
         s = self.env.ravel_state(robot_position)
-        action = int(robot_action_policy[s])
-        
-        next_V = 0
+        T, R = self.build_mdp(self.env)
+        policy = greedy(self.env)
+        robot_goal_env = self.build_policy_env(robot, int(policy[robot]))
+        if random.random() < self.env.params["epsilon"]:
+            action = random.choice(range(self.env.params["num_actions"]))
+        else:
+
+            V, robot_action_policy = self.compute_V(T, R)
+            action = int(robot_action_policy[s])
+            # self.plot_V(V)
+            # self.plot_V(robot_action_policy)
+            # self.env.render()
+
         if self.env.is_action_valid(robot_position, action):
             ns = self.env.ravel_state(self.env.get_next_state_from_action(robot_position, action))
             reward = R[action, s, ns]
-            next_V = V[ns]
+            #next_V = V[ns]
         else:
             reward = R[action, s, s]
-            next_V = V[s]
-        q = reward + self.gamma * next_V
-        return action, reward, q, robot_goal_env
+            #next_V = V[s]
+        #q = reward + self.gamma * next_V
+        return action, reward, robot_goal_env
 
     def build_mdp(self, env): 
         T = np.zeros((self.num_actions, self.num_states, self.num_states), 'f')
@@ -93,15 +96,16 @@ class POMDP:
                 if env.is_action_valid(state, action):
                     next_state = env.get_next_state_from_action(state, action)
                     next_state_num = env.ravel_state(next_state)
-                    if env.is_object(next_state):
-                        R[action_num, state_num, next_state_num] += self.params["goal_reward"]
-                    elif env.is_obstacle(next_state):
-                        R[action_num, state_num, next_state_num] += self.params["obstacle_reward"]
-                    elif env.is_robot(next_state):
-                        R[action_num, state_num, next_state_num] += self.params["obstacle_reward"]
                 else:
                     next_state = state
                     next_state_num = env.ravel_state(state)
+                
+                if env.is_object(next_state):
+                    R[action_num, state_num, next_state_num] += self.params["goal_reward"]
+                elif env.is_obstacle(next_state):
+                    R[action_num, state_num, next_state_num] += self.params["obstacle_reward"]
+                elif env.is_robot(next_state):
+                    R[action_num, state_num, next_state_num] += self.params["obstacle_reward"]
                 
                 R[action_num, state_num, next_state_num] += self.params["step_reward"]
                 if self.visited[next_state_num]:

@@ -18,7 +18,7 @@ def main():
         os.mkdir(dataset_folder)
 
     # training data
-    #create_dataset(os.path.join(dataset_folder, 'train_greedy'), params["train_envs"], params=params)
+    # create_dataset(os.path.join(dataset_folder, 'train_greedy'), params["train_envs"], params=params)
     # test data
     create_dataset(os.path.join(dataset_folder, 'test_greedy'), params["test_envs"], params=params)
 
@@ -36,17 +36,19 @@ def create_dataset(dataset_folder, num_envs, params):
     # randomize seeds, set to previous value to determinize random numbers
     np.random.seed()
     random.seed()
-    for env_i in range(num_envs):
-        print ("Generating %d. environment"%(env_i))
+    env_i = 0
+    while env_i < num_envs:
+        print ("Generating %d. environment"%(env_i + 1))
         # grid domain object
         env = MultiagentEnv(params=params)
         trajs, belief = generate_trajectories(env)
-
+	
         if not os.path.isdir(dataset_folder): 
             os.mkdir(dataset_folder)
-        with open(os.path.join(dataset_folder,"env"+str(env_i+1)), "wb") as f:
-            pickle.dump((trajs, belief), f)
-        
+        if len(trajs) > 0 and len(belief) > 0:
+            with open(os.path.join(dataset_folder,"env"+str(env_i+1)), "wb") as f:
+                pickle.dump((trajs, belief), f)
+                env_i += 1
     print ("Done.")
 
 def generate_trajectories(env):
@@ -65,14 +67,14 @@ def generate_trajectories(env):
         belief.append(b)
 
         for robot in robots:
-            action, reward, q, robot_env = pomdp.get_optimal_action_for_robot(robot) # robot_env has only 1 robot and 1 goal
+            action, reward, robot_env = pomdp.get_optimal_action_for_robot(robot) # robot_env has only 1 robot and 1 goal
             step = dict()
             step["robot"] = robot_env.robots[0].position
             step["other_robots"] = env.get_all_robots_positions_excluding(robot)
-            step["action"] = action
             step["reward"] = reward
-            step["q"] = q
+            step["optimal_action"] = action
             step["goals"] = [o.position for o in pomdp.env.objects]
+            step["action"] = action
             next_state, obs = env.do_action(env.robots[robot], action) 
             step["obs"] = env.map_obs(obs)
             trajs[robot].append(step)
@@ -82,7 +84,9 @@ def generate_trajectories(env):
             
         count += 1
         env.render()
-    
+
+    if count >= env.params["max_iter"]:
+        return [], []
     return trajs, belief
 
 if __name__ == "__main__":

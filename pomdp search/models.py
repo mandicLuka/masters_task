@@ -21,8 +21,8 @@ def full_map_cnn(params):
     conv3 = Conv2D(filters=256, kernel_size=3, padding='valid')(conv2)
     conv4 = Conv2D(filters=256, kernel_size=3, padding='valid')(conv3)
     flat = Flatten()(conv4)
-    fc1 = Dense(units=4096, activation="relu")(flat)
-    prediction = Dense(units=params["num_actions"], activation="softmax")(fc1)
+    fc1 = Dense(units=4096, activation="tanh")(flat)
+    prediction = Dense(units=params["num_actions"])(fc1)
 
     full_map = Model(inputs=grid, outputs=prediction)
     return full_map

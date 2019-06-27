@@ -1,4 +1,6 @@
 import keras.backend as K
+import numpy as np
 
 def action_acc(y_true, y_pred):
-    return K.mean(K.equal(K.argmax(y_true), K.argmax(y_pred)), axis=-1)
+    print(y_true.shape, y_pred.shape)
+    return np.mean(np.array(y_true == y_pred, dtype='i'), axis=-1)
