@@ -43,8 +43,8 @@ class FullMapCNN(Model):
             num_channels = 5
         shape = (self.params["num_rows"], self.params["num_cols"], num_channels)
         with self.graph.as_default():
-            self.X = tf.placeholder("float", [None, *shape])
-            self.y = tf.placeholder("float", [None, self.params["num_actions"]])
+            self.X = tf.placeholder("float32", [None, *shape])
+            self.y = tf.placeholder("float32", [None, self.params["num_actions"]])
 
             conv11 = layers.Conv2D(filters=32, kernel_size=3, padding='same')(self.X)
             conv12 = layers.Conv2D(filters=64, kernel_size=5, padding='same')(self.X)
@@ -60,6 +60,14 @@ class FullMapCNN(Model):
             self.loss = tf.losses.mean_squared_error(self.y, self.prediction)
             self.optimizer = tf.train.AdamOptimizer(self.params["learning_rate"]).minimize(self.loss)
             self.init = tf.global_variables_initializer()
+            
+            ws = self.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+            self.assign = []
+            self.weights_ph = []
+            for i, w in enumerate(ws):
+                ph = tf.placeholder("float32", shape=w.shape)
+                self.weights_ph.append(ph)
+                self.assign.append(w.assign(ph))
 
     def train(self, X, y):
         print("Train on " + str(X.shape[0]) + " samples.")
@@ -71,13 +79,12 @@ class FullMapCNN(Model):
         return prediction
 
     def set_trainable_weights(self, weights):
-        w = self.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
         for i, value in enumerate(weights):
-            self.sess.run(w[i].assign(value))
+            self.sess.run(self.assign[i], feed_dict={self.weights_ph[i]: value})
 
     def get_trainable_weights(self):
         values = []
-        variables = self.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
-        for var in variables: 
+        ws = self.graph.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES)
+        for var in ws: 
             values.append(self.sess.run(var))
         return values

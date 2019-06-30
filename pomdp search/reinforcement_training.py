@@ -19,7 +19,7 @@ from data_pipeline import *
 from keras.models import clone_model
 
 DELAY = 10
-NUM_TRAINERS = 3
+NUM_TRAINERS = 10
 is_training_done = False
 
 def main():
@@ -58,6 +58,7 @@ def main():
                 with net_lock:
                     sleep(0.5)
                     copy_model(agent.model, trainer.model) 
+                trainer.episode = curr_sim
                 trainer.is_set = True
             
             if trainer.done:
@@ -134,12 +135,12 @@ class ReinforcementAgent(Thread):
         states.append(replay[-1][0])  
         states = np.array(states)
          
-        # TODO: FIX THIS LINE !!!
         qs = self.model.predict(states)
         q_next = qs[1:]
         qs = qs[:-1]
         for i in range(len(actions)):
-            qs[actions[i]] = rewards[i] + self.gamma * np.max(q_next[i])
+            qs[i, actions[i]] = rewards[i] + self.gamma * np.max(q_next[i])
+        
         return states[:-1], actions, qs
 
     def train(self):
@@ -168,6 +169,7 @@ class ReinforcementTrainer(Thread):
         self.ready = True
         self.is_set = False
         self.done = False
+        self.episode = 0
         self.epsilon = params["epsilon"]
         self.epsilon_decay = params["epsilon_decay"]
         self.params = params
@@ -186,6 +188,7 @@ class ReinforcementTrainer(Thread):
         count = 0
         #env.render()
         _, R = pomdp.build_mdp(env)
+        total_reward = 0
         while not env.done and count < env.params["max_iter"]: 
             for robot in robots:
                 data = get_data_as_matrix(robot, env, pomdp, self.params)
@@ -198,9 +201,11 @@ class ReinforcementTrainer(Thread):
                 else:
                     action, _, _ = pomdp.get_optimal_action_for_robot(robot)
 
-                next_state, obs = env.do_action(env.robots[robot], action) 
                 reward = R[action, env.ravel_state(env.robots[robot].position), env.ravel_state(next_state)]
+                next_state, obs = env.do_action(env.robots[robot], action) 
+
                 _, R = pomdp.build_mdp(env)
+                total_reward += reward
 
                 if env.done:
                     break                
@@ -209,6 +214,10 @@ class ReinforcementTrainer(Thread):
             count += 1
             #env.render()
         self.epsilon *= self.epsilon_decay
+        np.set_printoptions(precision=3)
+        print("Episode: ", self.episode, " epsilon: ", self.epsilon)
+        if count > 0:
+            print("steps: ", count, " reward: ", total_reward, " avg: ", total_reward/count, "\n")
 
     def reset(self):
         self.replay = []
