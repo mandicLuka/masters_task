@@ -83,16 +83,6 @@ class MultiagentEnv(Env):
         self.num_states = self.num_rows * self.num_cols
         self.num_actions = params["num_actions"]
 
-        if isinstance(params["num_robots"], (list, )):
-            self.num_robots = random.choice(range(params["num_robots"][0], params["num_robots"][1]+1))
-        else:
-            self.num_robots = params["num_robots"]
-        if isinstance(params["num_objects"], (list, )):
-            self.num_objects = random.choice(range(params["num_objects"][0], params["num_objects"][1]+1))
-        else:
-            self.num_objects = params["num_objects"]
-        
-
         self.fields = [FREE, OBSTACLE, ROBOT, OBJECT]
         self.num_fields = len(self.fields)
         self.totwal_reward = 0
@@ -104,10 +94,22 @@ class MultiagentEnv(Env):
         self.objects = []
 
         if grid is None:
+            if isinstance(params["num_robots"], (list, )):
+                self.num_robots = random.choice(range(params["num_robots"][0], params["num_robots"][1]+1))
+            else:
+                self.num_robots = params["num_robots"]
+            if isinstance(params["num_objects"], (list, )):
+                self.num_objects = random.choice(range(params["num_objects"][0], params["num_objects"][1]+1))
+            else:
+                self.num_objects = params["num_objects"]
             self.init_robots_objects()
         else:
             self.robots = self.find_on_map("robot")
             self.objects = self.find_on_map("object")
+            self.num_robots = len(self.robots)
+            self.num_objects = len(self.objects)
+
+            
 
         self.done = False
 

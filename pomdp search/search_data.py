@@ -6,6 +6,7 @@ import random
 from pomdp import POMDP
 from utils import load_params
 import pickle
+import worlds
 
 PARAMS_FILE_PATH = "dataset_params.yaml"
 
@@ -18,7 +19,7 @@ def main():
         os.mkdir(dataset_folder)
 
     # training data
-    # create_dataset(os.path.join(dataset_folder, 'train_greedy'), params["train_envs"], params=params)
+    create_dataset(os.path.join(dataset_folder, 'train_greedy'), params["train_envs"], params=params)
     # test data
     create_dataset(os.path.join(dataset_folder, 'test_greedy'), params["test_envs"], params=params)
 
@@ -40,7 +41,7 @@ def create_dataset(dataset_folder, num_envs, params):
     while env_i < num_envs:
         print ("Generating %d. environment"%(env_i + 1))
         # grid domain object
-        env = MultiagentEnv(params=params)
+        env = MultiagentEnv(params=params, grid)
         trajs, belief = generate_trajectories(env)
 	
         if not os.path.isdir(dataset_folder): 

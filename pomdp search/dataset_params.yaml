@@ -2,6 +2,7 @@
 dataset_folder: "Datasets"
 train_envs: 10000
 test_envs: 1000
+num_episodes: 10000
 
 obstacle_prob: 0.15
 num_rows: 10
@@ -18,13 +19,16 @@ step_reward: 1
 gamma: 0.98
 max_iter: 500
 epsilon: 0.25
+epsilon_decay: 0.995
+learning_rate: 0.001
 
 num_clusters: 8
 belief_scale: 50
 
 train_folder: "train_greedy"
 test_folder: "train_greedy"
-file_batch: 300
+file_batch: 2
+batch_percentage: 0.3
 use_coords: True
 num_epochs: 15
 
