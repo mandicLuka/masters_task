@@ -64,15 +64,12 @@ class POMDP:
         T, R = self.build_mdp(self.env)
         policy = greedy(self.env)
         robot_goal_env = self.build_policy_env(robot, int(policy[robot]))
-        if random.random() < self.env.params["epsilon"]:
-            action = random.choice(range(self.env.params["num_actions"]))
-        else:
 
-            V, robot_action_policy = self.compute_V(T, R)
-            action = int(robot_action_policy[s])
-            # self.plot_V(V)
-            # self.plot_V(robot_action_policy)
-            # self.env.render()
+        V, robot_action_policy = self.compute_V(T, R)
+        action = int(robot_action_policy[s])
+        # self.plot_V(V)
+        # self.plot_V(robot_action_policy)
+        # self.env.render()
 
         if self.env.is_action_valid(robot_position, action):
             ns = self.env.ravel_state(self.env.get_next_state_from_action(robot_position, action))

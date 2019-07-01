@@ -15,7 +15,7 @@ num_actions: 4
 goal_reward: 10
 obstacle_reward: -15
 visited_reward: -5
-step_reward: 1
+step_reward: 0
 gamma: 0.98
 max_iter: 150
 epsilon: 0.65

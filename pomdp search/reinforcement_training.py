@@ -18,8 +18,7 @@ from pomdp import POMDP
 from data_pipeline import *
 from keras.models import clone_model
 
-DELAY = 10
-NUM_TRAINERS = 10
+NUM_TRAINERS = 1
 is_training_done = False
 
 def main():
@@ -186,10 +185,11 @@ class ReinforcementTrainer(Thread):
         robots = range(len(env.robots))
         pomdp = POMDP(env, self.params)
         count = 0
-        #env.render()
+        env.render()
         _, R = pomdp.build_mdp(env)
         total_reward = 0
         while not env.done and count < env.params["max_iter"]: 
+            a, b = 0, 0
             for robot in robots:
                 data = get_data_as_matrix(robot, env, pomdp, self.params)
 
@@ -201,18 +201,19 @@ class ReinforcementTrainer(Thread):
                 else:
                     action, _, _ = pomdp.get_optimal_action_for_robot(robot)
 
-                reward = R[action, env.ravel_state(env.robots[robot].position), env.ravel_state(next_state)]
+                state = env.robots[robot].position
                 next_state, obs = env.do_action(env.robots[robot], action) 
-
-                _, R = pomdp.build_mdp(env)
-                total_reward += reward
-
-                if env.done:
-                    break                
-                pomdp.propagate_obs(next_state, action, obs)
+                reward = R[action, env.ravel_state(state), env.ravel_state(next_state)]
                 self.replay.append((data[0], action, reward))
+                total_reward += reward
+                if env.done:
+                    break     
+                pomdp.propagate_obs(next_state, action, obs)
+                _, R = pomdp.build_mdp(env)           
+                
+            env.render()
             count += 1
-            #env.render()
+            
         self.epsilon *= self.epsilon_decay
         np.set_printoptions(precision=3)
         print("Episode: ", self.episode, " epsilon: ", self.epsilon)
