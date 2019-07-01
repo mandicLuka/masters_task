@@ -115,11 +115,14 @@ def get_data_as_matrix(robot, env, pomdp, params):
         other_robots[r] = 1
     for g in [o.position for o in pomdp.env.objects]:
         goals[g] = 1
+    # data = np.concatenate((pomdp.object_belief.reshape(env.shape)[..., np.newaxis],  \
+    #                         pomdp.obstacle_belief.reshape(env.shape)[..., np.newaxis], \
+    #                         robot_position[..., np.newaxis], \
+    #                         other_robots[..., np.newaxis], \
+    #                         goals[..., np.newaxis]), axis = -1)[np.newaxis, ...]
     data = np.concatenate((pomdp.object_belief.reshape(env.shape)[..., np.newaxis],  \
-                            pomdp.obstacle_belief.reshape(env.shape)[..., np.newaxis], \
-                            robot_position[..., np.newaxis], \
-                            other_robots[..., np.newaxis], \
-                            goals[..., np.newaxis]), axis = -1)[np.newaxis, ...]
+                           robot_position[..., np.newaxis], \
+                           goals[..., np.newaxis]), axis = -1)[np.newaxis, ...]
     if bool(params["use_coords"]) == True:
         data = add_coords_to_data(data, params)
     return data

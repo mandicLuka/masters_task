@@ -40,7 +40,7 @@ class FullMapCNN(Model):
         if bool(self.params["use_coords"]):
             num_channels = 7
         else:
-            num_channels = 5
+            num_channels = 3
         shape = (self.params["num_rows"], self.params["num_cols"], num_channels)
         with self.graph.as_default():
             self.X = tf.placeholder("float32", [None, *shape])

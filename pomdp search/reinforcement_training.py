@@ -16,9 +16,9 @@ import worlds
 from envs.multiagent_env import *
 from pomdp import POMDP
 from data_pipeline import *
-from keras.models import clone_model
+import tensorflow as tf
 
-NUM_TRAINERS = 1
+NUM_TRAINERS = 3
 is_training_done = False
 
 def main():
@@ -56,6 +56,9 @@ def main():
                 trainer.reset()
                 with net_lock:
                     sleep(0.5)
+                    if (curr_sim+1) % 300 == 0:
+                        with agent.model.graph.as_default():
+                            agent.model.save_weights("weights" + str(curr_sim+1) + ".h5")
                     copy_model(agent.model, trainer.model) 
                 trainer.episode = curr_sim
                 trainer.is_set = True
@@ -64,6 +67,7 @@ def main():
                 simulation_replays.put(trainer.replay)
                 trainer.ready = True
 
+        
         if curr_sim == num_episodes and \
             all(trainer.done for trainer in trainers) and \
             agent.done:   
@@ -185,7 +189,7 @@ class ReinforcementTrainer(Thread):
         robots = range(len(env.robots))
         pomdp = POMDP(env, self.params)
         count = 0
-        env.render()
+        #env.render()
         _, R = pomdp.build_mdp(env)
         total_reward = 0
         while not env.done and count < env.params["max_iter"]: 
@@ -195,11 +199,9 @@ class ReinforcementTrainer(Thread):
 
                 qs = self.model.predict(data)
                 if random.random() < self.epsilon:
-                    action = random.choice(range(4))
-                elif self.epsilon < 0.2:
-                    action = np.argmax(qs[0])
-                else:
                     action, _, _ = pomdp.get_optimal_action_for_robot(robot)
+                else:
+                    action = np.argmax(qs[0])
 
                 state = env.robots[robot].position
                 next_state, obs = env.do_action(env.robots[robot], action) 
@@ -210,8 +212,9 @@ class ReinforcementTrainer(Thread):
                     break     
                 pomdp.propagate_obs(next_state, action, obs)
                 _, R = pomdp.build_mdp(env)           
-                
-            env.render()
+            
+            if self.id == "t1":
+                env.render()
             count += 1
             
         self.epsilon *= self.epsilon_decay
@@ -236,7 +239,9 @@ class ReinforcementTrainer(Thread):
                 self.train()
                 self.done = True
             sleep(1)
-            
+
+
+      
 
 if __name__ == "__main__":
     main()
