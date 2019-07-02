@@ -1,15 +1,16 @@
 import tensorflow as tf
 import numpy as np
-from models import full_map_cnn
+from models import full_map_cnn, FullMapCNN
 from utils import load_params
 import pickle
 import copy
 import os
+from envs.multiagent_env import *
 import numpy as np
 from metrics import action_acc
-import gym
 from pomdp import POMDP
-from train_model import DataPipeline, add_coords_to_data
+from data_pipeline import *
+import worlds
 
 TEST_DIR = os.path.join(os.getcwd(), "Datasets/test")
 
@@ -20,44 +21,48 @@ def main():
         TEST_DIR = os.path.join(os.getcwd(), "Datasets", params["test_folder"])
     
  
-    model = full_map_cnn(params)
-    model.compile(tf.train.AdamOptimizer(), loss='mse', metrics=["mae"])
-    model.load_weights("weights15")
+    model = FullMapCNN(params)
+    
+    model.load_model("weights_random900.h5")
 
+    w = model.get_trainable_weights()
+    actions = []
+    optim_actions = []
     for i in range(100):
-        env = gym.make("search_env:multiagent_env-v0", params=params)
-        robots = range(len(env.robots))
-        pomdp = POMDP(env, env.params)
+        position = (random.choice(range(params["num_rows"])),
+                    random.choice(range(params["num_cols"])))
+        if position == (8, 8):
+            position = (0, 2)
+        robots = [position]
+        goals = [(8, 8)]
+
+        grid = worlds.empty_with_robots_and_objects(params, robots, goals)
+        env = MultiagentEnv(params=params, grid=grid)
+        pomdp = POMDP(env, params)
         count = 0
         env.render()
-        while not env.done and count < env.params["max_iter"]: 
-            object_belief = pomdp.object_belief.reshape(pomdp.shape)
-            obstacle_belief = pomdp.obstacle_belief.reshape(pomdp.shape)
+        robots = [0]
+        _, R = pomdp.build_mdp(env) 
 
+        while not env.done and count < env.params["max_iter"]: 
             for robot in robots:
-                action, reward, robot_env = pomdp.get_optimal_action_for_robot(robot) # robot_env has only 1 robot and 1 goal
-                robot_position = np.zeros_like(object_belief)
-                other_robots = np.zeros_like(object_belief)
-                goals = np.zeros_like(object_belief)
-                robot_position[robot_env.robots[0].position] = 1
-                for r in env.get_all_robots_positions_excluding(robot):
-                    other_robots[r] = 1
-                for g in [o.position for o in pomdp.env.objects]:
-                    goals[g] = 1
-                data = np.concatenate((object_belief[..., np.newaxis],  \
-                                      obstacle_belief[..., np.newaxis], \
-                                      robot_position[..., np.newaxis], \
-                                      other_robots[..., np.newaxis], \
-                                      goals[..., np.newaxis]), axis = -1)[np.newaxis, ...]
+                data = get_data_as_matrix(robot, env, pomdp, params)
+
                 qs = model.predict(data)
-                pred_action = np.argmax(qs)
-                next_state, obs = env.do_action(env.robots[robot], pred_action) 
+                optim_action, _, _ = pomdp.get_optimal_action_for_robot(robot)
+                action = np.argmax(qs[0])
+                actions.append(action)
+                optim_actions.append(optim_action)
+                state = env.robots[robot].position
+                next_state, obs = env.do_action(env.robots[robot], optim_action) 
+                reward = R[action, env.ravel_state(state), env.ravel_state(next_state)]
                 if env.done:
-                    break                
+                    break     
                 pomdp.propagate_obs(next_state, action, obs)
-            
+                _, R = pomdp.build_mdp(env)           
+
             count += 1
-            env.render()
+        print(np.mean(np.array(actions) == np.array(optim_actions)))
 
 if __name__ == "__main__":
     main()

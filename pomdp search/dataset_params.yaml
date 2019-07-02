@@ -20,7 +20,7 @@ gamma: 0.98
 max_iter: 150
 epsilon: 0.95
 epsilon_decay: 0.992
-learning_rate: 0.001
+learning_rate: 0.00001
 
 num_clusters: 8
 belief_scale: 50

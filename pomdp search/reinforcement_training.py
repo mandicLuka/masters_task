@@ -18,7 +18,7 @@ from pomdp import POMDP
 from data_pipeline import *
 import tensorflow as tf
 
-NUM_TRAINERS = 3
+NUM_TRAINERS = 2
 is_training_done = False
 
 def main():
@@ -58,7 +58,7 @@ def main():
                     sleep(0.5)
                     if (curr_sim+1) % 300 == 0:
                         with agent.model.graph.as_default():
-                            agent.model.save_weights("weights" + str(curr_sim+1) + ".h5")
+                            agent.model.save_model("weights" + str(curr_sim+1))
                     copy_model(agent.model, trainer.model) 
                 trainer.episode = curr_sim
                 trainer.is_set = True
@@ -153,8 +153,11 @@ class ReinforcementAgent(Thread):
 
             states, _, q_values = self.get_batch()
             if len(states) > 0:
+                a = 0
                 with self.net_lock:  
+                    a = self.model.evaluate(states, q_values)
                     self.model.train(states, q_values)
+                    a = self.model.evaluate(states, q_values)
                 self.done = True
                 sleep(1)
 
@@ -193,7 +196,6 @@ class ReinforcementTrainer(Thread):
         _, R = pomdp.build_mdp(env)
         total_reward = 0
         while not env.done and count < env.params["max_iter"]: 
-            a, b = 0, 0
             for robot in robots:
                 data = get_data_as_matrix(robot, env, pomdp, self.params)
 
