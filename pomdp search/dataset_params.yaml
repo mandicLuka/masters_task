@@ -20,7 +20,7 @@ gamma: 0.98
 max_iter: 150
 epsilon: 0.95
 epsilon_decay: 0.992
-learning_rate: 0.00001
+learning_rate: 0.01
 
 num_clusters: 8
 belief_scale: 50
@@ -29,7 +29,7 @@ train_folder: "train_greedy"
 test_folder: "train_greedy"
 file_batch: 5
 batch_percentage: 0.6
-use_coords: False
+use_coords: True
 num_epochs: 15
 
 

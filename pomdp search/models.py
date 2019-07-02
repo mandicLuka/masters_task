@@ -40,7 +40,7 @@ class FullMapCNN(Model):
 
     def build_model(self):
         if bool(self.params["use_coords"]):
-            num_channels = 7
+            num_channels = 5
         else:
             num_channels = 3
         shape = (self.params["num_rows"], self.params["num_cols"], num_channels)
@@ -94,7 +94,6 @@ class FullMapCNN(Model):
         for var in ws: 
             values.append(self.sess.run(var))
         return values
-
 
     def save_model(self, name):
         self.saver.save(self.sess, name + ".ckpt")

@@ -89,6 +89,8 @@ def main():
 def copy_model(agent_model, trainer_model):
     weights = agent_model.get_trainable_weights()
     trainer_model.set_trainable_weights(weights)
+    a = trainer_model.get_trainable_weights()
+    d = 5
 
 class ReinforcementAgent(Thread):
 
@@ -155,9 +157,10 @@ class ReinforcementAgent(Thread):
             if len(states) > 0:
                 a = 0
                 with self.net_lock:  
-                    a = self.model.evaluate(states, q_values)
+                    a = self.model.get_trainable_weights()
                     self.model.train(states, q_values)
-                    a = self.model.evaluate(states, q_values)
+                    b = self.model.get_trainable_weights()
+                
                 self.done = True
                 sleep(1)
 
@@ -185,6 +188,7 @@ class ReinforcementTrainer(Thread):
         
         position = (random.choice(range(self.params["num_rows"])),
                     random.choice(range(self.params["num_cols"])))
+        a = self.model.get_trainable_weights()
         robots = [position]
         goals = [(8, 8)]
         grid = worlds.empty_with_robots_and_objects(self.params, robots, goals)
@@ -201,7 +205,7 @@ class ReinforcementTrainer(Thread):
 
                 qs = self.model.predict(data)
                 if random.random() < self.epsilon:
-                    action, _, _ = pomdp.get_optimal_action_for_robot(robot)
+                    action = random.choice(list(range(4)))
                 else:
                     action = np.argmax(qs[0])
 
