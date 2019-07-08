@@ -6,10 +6,10 @@ from yaml import safe_load as load_config
 
 def full_map_cnn(params):
     
+    num_channels = len(params["data_channels"])
     if bool(params["use_coords"]):
-        num_channels = 7
-    else:
-        num_channels = 5
+        num_channels += 2
+    
     grid = layers.Input((params["num_rows"], params["num_cols"], num_channels))
 
     conv11 = layers.Conv2D(filters=32, kernel_size=3, padding='same')(grid)
@@ -39,11 +39,15 @@ class FullMapCNN(Model):
             self.saver = tf.train.Saver()
 
     def build_model(self):
+        num_channels = len(self.params["data_channels"])
         if bool(self.params["use_coords"]):
-            num_channels = 5
-        else:
-            num_channels = 3
-        shape = (self.params["num_rows"], self.params["num_cols"], num_channels)
+            num_channels += 2
+
+        if bool(self.params["use_local_data"]) == True:
+            r = 2*self.params["local_data_radius"]+1
+            shape = (r, r, num_channels)
+        else:   
+            shape = (self.params["num_rows"], self.params["num_cols"], num_channels)
         with self.graph.as_default():
             self.X = tf.placeholder("float32", [None, *shape])
             self.y = tf.placeholder("float32", [None, self.params["num_actions"]])
@@ -56,10 +60,10 @@ class FullMapCNN(Model):
             conv3 = layers.Conv2D(filters=256, kernel_size=3, padding='valid')(conv2)
             conv4 = layers.Conv2D(filters=256, kernel_size=3, padding='valid')(conv3)
             flat = layers.Flatten()(conv4)
-            fc1 = layers.Dense(units=4096, activation="tanh")(flat)
-            self.prediction = layers.Dense(units=self.params["num_actions"])(fc1)
+            fc1 = layers.Dense(units=4096, activation="relu")(flat)
+            self.prediction = layers.Dense(units=self.params["num_actions"], activation="softmax")(fc1)
 
-            self.loss = tf.losses.mean_squared_error(self.y, self.prediction)
+            self.loss = tf.losses.softmax_cross_entropy(self.y, self.prediction)
             self.optimizer = tf.train.AdamOptimizer(self.params["learning_rate"]).minimize(self.loss)
             self.init = tf.global_variables_initializer()
             

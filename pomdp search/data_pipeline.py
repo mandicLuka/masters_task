@@ -2,6 +2,7 @@ import os, copy, pickle
 import numpy as np
 
 
+## OFFLINE TRAINING
 class DataPipeline:
     def __init__(self, path, params):
         self.path = path
@@ -100,29 +101,83 @@ def add_coords_to_data(data, params):
     for j in range(shape[0]):
         j_channel[j] = rangj
 
-    tempi = np.vstack([i_channel[np.newaxis, ...]]*data.shape[0])
-    tempj = np.vstack([j_channel[np.newaxis, ...]]*data.shape[0])
-    data = np.concatenate((data, tempi[..., np.newaxis], \
-                                 tempj[..., np.newaxis]), axis=-1)
+    data = np.concatenate((data, i_channel[..., np.newaxis], \
+                                 j_channel[..., np.newaxis]), axis=-1)
     return data
 
+
+#ONLINE TRAINING
 def get_data_as_matrix(robot, env, pomdp, params):
-    robot_position = np.zeros(env.shape)
-    other_robots = np.zeros(env.shape)
-    goals = np.zeros(env.shape)
-    robot_position[env.robots[robot].position] = 1
-    for r in env.get_all_robots_positions_excluding(robot):
-        other_robots[r] = 1
-    for g in [o.position for o in pomdp.env.objects]:
-        goals[g] = 1
-    # data = np.concatenate((pomdp.object_belief.reshape(env.shape)[..., np.newaxis],  \
-    #                         pomdp.obstacle_belief.reshape(env.shape)[..., np.newaxis], \
-    #                         robot_position[..., np.newaxis], \
-    #                         other_robots[..., np.newaxis], \
-    #                         goals[..., np.newaxis]), axis = -1)[np.newaxis, ...]
-    data = np.concatenate((pomdp.object_belief.reshape(env.shape)[..., np.newaxis],  \
-                           robot_position[..., np.newaxis], \
-                           goals[..., np.newaxis]), axis = -1)[np.newaxis, ...]
+    channels = params["data_channels"]
+    data = np.zeros((*env.shape, 1))
+    if "object_belief" in channels:
+        data = np.concatenate((data, pomdp.object_belief.reshape(env.shape)[..., np.newaxis]), axis=-1)
+    if "obstacle_belief" in channels:
+        data = np.concatenate((data, pomdp.obstacle_belief.reshape(env.shape)[..., np.newaxis]), axis=-1)
+    if "robot_position" in channels:
+        robot_position = np.zeros((*env.shape, 1))
+        pos = env.robots[robot].position
+        robot_position[pos[0], pos[1], 0] = 1
+        data = np.concatenate((data, robot_position[..., np.newaxis]), axis=-1)
+
+    if "other_robots" in channels:
+        other_robots = np.zeros((*env.shape, 1))
+        for r in env.get_all_robots_positions_excluding(robot):
+            other_robots[r[0], r[1], 0] = 1
+        data = np.concatenate((data, other_robots), axis=-1)
+    
+    if "goals" in channels:
+        goals = np.zeros((*env.shape, 1))
+        for g in [o.position for o in pomdp.env.objects]:
+            goals[g[0], g[1], 0] = 1
+        data = np.concatenate((data, goals), axis=-1)
+    
+    if "global_goal_map" in channels:
+        data = np.concatenate((data, get_goal_map(env, params)[..., np.newaxis]), axis=-1)
+    
+    if "single_goal_map" in channels:
+        data = np.concatenate((data, get_goal_map(pomdp.env, params)[..., np.newaxis]), axis=-1)
+
     if bool(params["use_coords"]) == True:
         data = add_coords_to_data(data, params)
+    return data[:, :, 1:]
+
+def get_local_data_as_matrix(robot, env, pomdp, params):
+    p = copy.deepcopy(params)
+    if "robot_position" in params["data_channels"]:
+        params["data_channels"].remove("robot_position")
+    data = get_data_as_matrix(robot, env, pomdp, p)
+    t = data
+    pos = env.robots[robot].position
+    r = 2*params["local_data_radius"]
+    temp = np.zeros((env.shape[0]+2*r, env.shape[1]+2*r, data.shape[-1]))
+    if "obstacle_belief" in params["data_channels"]:
+        temp[:, :, 1] = 1
+    if bool(params["use_coords"]):
+        temp[:, :, -2:] = -1
+    
+    temp[r:env.shape[0]+r, r:env.shape[1] + r, :] = data
+    data = temp[r+pos[0]-r//2:r+pos[0]+r//2+1, 
+                 r+pos[1]-r//2:r+pos[1]+r//2+1, :]
     return data
+
+def get_goal_map(env, params):
+    delta = params["goal_map_decay"]
+    size = params["goal_map_kernel"]
+    goal_map = np.zeros(env.shape)
+    
+    kernel = np.zeros((size, size))
+    for i in range(size):
+        for j in range(size):
+            d = np.array([i, j]) - np.array([size//2, size//2])
+            dist = np.linalg.norm(d)
+            kernel[i, j] = np.exp(-delta*dist)
+
+    for g in [o.position for o in env.objects]:
+        s = size-1
+        temp = np.zeros((env.shape[0]+2*s, env.shape[1]+2*s))
+        temp[s:env.shape[0]+s, s:env.shape[1] + s] = goal_map
+        temp[s+g[0]-size//2:s+g[0]+size//2+1, 
+                 s+g[1]-size//2:s+g[1]+size//2+1] += kernel
+        goal_map = temp[s:env.shape[0]+s, s:env.shape[1] + s]
+    return goal_map

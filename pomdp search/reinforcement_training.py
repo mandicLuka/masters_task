@@ -185,23 +185,29 @@ class ReinforcementTrainer(Thread):
         self.model = FullMapCNN(params)
 
     def train(self):
-        
-        position = (random.choice(range(self.params["num_rows"])),
-                    random.choice(range(self.params["num_cols"])))
-        a = self.model.get_trainable_weights()
+        goals = [(5, 5)]
+        position = goals[0]
+        while position in goals:
+            position = (random.choice(range(self.params["num_rows"])),
+                        random.choice(range(self.params["num_cols"])))
         robots = [position]
-        goals = [(8, 8)]
+        
         grid = worlds.empty_with_robots_and_objects(self.params, robots, goals)
         env = MultiagentEnv(self.params, grid)
         robots = range(len(env.robots))
         pomdp = POMDP(env, self.params)
         count = 0
-        #env.render()
+        env.render()
         _, R = pomdp.build_mdp(env)
         total_reward = 0
         while not env.done and count < env.params["max_iter"]: 
             for robot in robots:
-                data = get_data_as_matrix(robot, env, pomdp, self.params)
+
+                if self.params["use_local_data"]:
+                    data = get_local_data_as_matrix(robot, env, pomdp, self.params)
+                else:
+                    data = get_data_as_matrix(robot, env, pomdp, self.params)
+                data = data[np.newaxis, ...]
 
                 qs = self.model.predict(data)
                 if random.random() < self.epsilon:
@@ -246,8 +252,6 @@ class ReinforcementTrainer(Thread):
                 self.done = True
             sleep(1)
 
-
-      
 
 if __name__ == "__main__":
     main()
