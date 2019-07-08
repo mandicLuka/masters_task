@@ -19,23 +19,23 @@ step_reward: -1
 gamma: 0.99
 max_iter: 150
 epsilon: 0.95
-epsilon_decay: 0.992
-learning_rate: 0.01
+epsilon_decay: 0.995
+learning_rate: 0.001
 
 num_clusters: 8
 belief_scale: 50
 
 use_local_data: True
 local_data_radius: 4
-data_channels: ["object_belief", "global_goal_map"] 
-use_coords: True
+data_channels: ["global_goal_map"] 
+use_coords: False
 goal_map_decay: 0.4
 goal_map_kernel: 19
 
 train_folder: "train_greedy"
 test_folder: "train_greedy"
-file_batch: 5
-batch_percentage: 0.6
+file_batch: 6
+batch_percentage: 0.2
 
 num_epochs: 15
 

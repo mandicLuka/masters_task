@@ -60,10 +60,10 @@ class FullMapCNN(Model):
             conv3 = layers.Conv2D(filters=256, kernel_size=3, padding='valid')(conv2)
             conv4 = layers.Conv2D(filters=256, kernel_size=3, padding='valid')(conv3)
             flat = layers.Flatten()(conv4)
-            fc1 = layers.Dense(units=4096, activation="relu")(flat)
-            self.prediction = layers.Dense(units=self.params["num_actions"], activation="softmax")(fc1)
+            fc1 = layers.Dense(units=4096, activation="tanh")(flat)
+            self.prediction = layers.Dense(units=self.params["num_actions"])(fc1)
 
-            self.loss = tf.losses.softmax_cross_entropy(self.y, self.prediction)
+            self.loss = tf.losses.mean_squared_error(self.y, self.prediction)
             self.optimizer = tf.train.AdamOptimizer(self.params["learning_rate"]).minimize(self.loss)
             self.init = tf.global_variables_initializer()
             
@@ -76,9 +76,11 @@ class FullMapCNN(Model):
                 self.assign.append(w.assign(ph))
 
     def train(self, X, y):
-        print("Train on " + str(X.shape[0]) + " samples.")
-        _, loss = self.sess.run([self.optimizer, self.loss], feed_dict={self.X: X, self.y: y})
-        print("Loss: " + str(loss))
+        with open("loss.txt", "a") as f:
+            f.write("Train on " + str(X.shape[0]) + " samples.\n")
+            _, loss = self.sess.run([self.optimizer, self.loss], feed_dict={self.X: X, self.y: y})
+            f.write("Loss: " + str(loss) + "\n\n")
+            f.write(str(self.predict(X[:5])))
 
     def predict(self, X):
         prediction = self.sess.run(self.prediction, feed_dict={self.X: X})

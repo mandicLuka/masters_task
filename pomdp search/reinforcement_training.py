@@ -64,7 +64,11 @@ def main():
                 trainer.is_set = True
             
             if trainer.done:
-                simulation_replays.put(trainer.replay)
+                if trainer.finished_task:
+                    simulation_replays.put(trainer.replay)
+                else:
+                    curr_sim -= 1
+                trainer.finished_task = False
                 trainer.ready = True
 
         
@@ -145,7 +149,7 @@ class ReinforcementAgent(Thread):
         qs = qs[:-1]
         for i in range(len(actions)):
             qs[i, actions[i]] = rewards[i] + self.gamma * np.max(q_next[i])
-        
+        qs[-1] = rewards[-1]
         return states[:-1], actions, qs
 
     def train(self):
@@ -157,10 +161,8 @@ class ReinforcementAgent(Thread):
             if len(states) > 0:
                 a = 0
                 with self.net_lock:  
-                    a = self.model.get_trainable_weights()
                     self.model.train(states, q_values)
-                    b = self.model.get_trainable_weights()
-                
+                    a = self.model.get_trainable_weights()                
                 self.done = True
                 sleep(1)
 
@@ -183,6 +185,7 @@ class ReinforcementTrainer(Thread):
         self.epsilon_decay = params["epsilon_decay"]
         self.params = params
         self.model = FullMapCNN(params)
+        self.finished_task = False
 
     def train(self):
         goals = [(5, 5)]
@@ -197,7 +200,7 @@ class ReinforcementTrainer(Thread):
         robots = range(len(env.robots))
         pomdp = POMDP(env, self.params)
         count = 0
-        env.render()
+        #env.render()
         _, R = pomdp.build_mdp(env)
         total_reward = 0
         while not env.done and count < env.params["max_iter"]: 
@@ -225,15 +228,21 @@ class ReinforcementTrainer(Thread):
                 pomdp.propagate_obs(next_state, action, obs)
                 _, R = pomdp.build_mdp(env)           
             
-            if self.id == "t1":
-                env.render()
+            #if self.id == "t1":
+            #    env.render()
             count += 1
             
+        if count >= env.params["max_iter"]:
+            return
+
+        self.finished_task = True
         self.epsilon *= self.epsilon_decay
         np.set_printoptions(precision=3)
-        print("Episode: ", self.episode, " epsilon: ", self.epsilon)
-        if count > 0:
-            print("steps: ", count, " reward: ", total_reward, " avg: ", total_reward/count, "\n")
+
+        with open("output.txt", "a") as f:
+            f.write("Episode: " + str(self.episode) + " epsilon: " + str(self.epsilon) + "\n")
+            if count > 0:
+                f.write("steps: " + str(count) + " reward: " + str(total_reward) + " avg: " + str(total_reward/count) + "\n\n")
 
     def reset(self):
         self.replay = []
