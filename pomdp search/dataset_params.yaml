@@ -1,7 +1,7 @@
 
 dataset_folder: "Datasets"
 train_envs: 10000
-test_envs: 400
+test_envs: 1000
 num_episodes: 10000
 
 num_rows: 10
@@ -16,10 +16,10 @@ num_actions: 4
 goal_reward: 30
 obstacle_reward: -15
 visited_reward: -5
-step_reward: -1
+step_reward: 1
 gamma: 0.99
 max_iter: 150
-epsilon: 0.95
+epsilon: 0.25
 epsilon_decay: 0.995
 learning_rate: 0.001
 

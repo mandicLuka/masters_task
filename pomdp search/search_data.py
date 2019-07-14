@@ -75,6 +75,8 @@ def generate_trajectories(env):
             step["reward"] = reward
             step["optimal_action"] = action
             step["goals"] = [o.position for o in pomdp.env.objects]
+            if random.random() < env.params["epsilon"]:
+                action = random.choice(range(env.params["num_actions"]))
             step["action"] = action
             next_state, obs = env.do_action(env.robots[robot], action) 
             step["obs"] = env.map_obs(obs)
