@@ -122,6 +122,7 @@ class POMDP:
             measurement = rel[state][OBSTACLE]
             self.measurements[i_state][OBSTACLE].append(measurement)
         self.object_belief = self.get_belief(OBJECT)
+        self.object_belief[np.isclose(self.object_belief, 1)] = 0
         self.obstacle_belief = self.get_belief(OBSTACLE)
 
         # X = np.zeros((self.num_states-np.where(self.visited == True)[0].size, 3))
@@ -178,14 +179,12 @@ class POMDP:
         for i in range(self.num_states):
             mes = self.measurements[i][obj]
             if mes:
-                a = 1 - (1 - np.array(self.measurements[i][obj])).prod()
+                a = (1 - np.array(self.measurements[i][obj])).prod()
                 b = np.array(self.measurements[i][obj]).prod()
-                if np.isclose(a , 1):
-                    belief[i] = 0 # dunno what is better, 1 or 0
-                elif np.isclose(b, 0):
-                    belief[i] = 0
+                if np.isclose(b, 0):
+                    belief[i] = 0 # dunno what is better, 1 or 0                    
                 else:
-                    belief[i] = (a+b)/2
+                    belief[i] = 1 / (1 + a/b)
         return belief
 
     def build_policy_env(self, robot, goal):
@@ -200,6 +199,7 @@ class POMDP:
         np.set_printoptions(precision=1)
         for i in range(self.num_rows):
             print(V[i*self.num_cols:(i+1)*self.num_cols])
+        print("\n")
 
 
 def plot_clusters(X, y, shape):

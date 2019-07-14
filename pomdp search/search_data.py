@@ -41,7 +41,7 @@ def create_dataset(dataset_folder, num_envs, params):
     while env_i < num_envs:
         print ("Generating %d. environment"%(env_i + 1))
         # grid domain object
-        env = MultiagentEnv(params=params, grid)
+        env = MultiagentEnv(params=params)
         trajs, belief = generate_trajectories(env)
 	
         if not os.path.isdir(dataset_folder): 
@@ -82,9 +82,10 @@ def generate_trajectories(env):
             if env.done:
                 break                
             pomdp.propagate_obs(next_state, action, obs)
-            
-        count += 1
+        
+        
         env.render()
+        count += 1
 
     if count >= env.params["max_iter"]:
         return [], []
