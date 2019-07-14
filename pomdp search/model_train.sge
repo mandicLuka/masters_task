@@ -1,7 +1,6 @@
 #$ -N multiagent_search
 #$ -cwd
 #$ -pe *mpi 12
-#$ -pe gpu 1
 
 module load tensorflow/1-12-0-gpu
-cuda-wrapper.sh python3.5 reinforcement_training.py
+python3.5 reinforcement_training.py
