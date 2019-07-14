@@ -9,7 +9,7 @@ import worlds
 from pomdp import POMDP
 import numpy as np
 from metrics import action_acc
-from data_pipeline import DataPipeline, add_coords_to_data
+from data_pipeline import *
 from envs.multiagent_env import *
 
 TRAIN_DIR = os.path.join(os.getcwd(), "Datasets/train")
@@ -17,64 +17,50 @@ TRAIN_DIR = os.path.join(os.getcwd(), "Datasets/train")
 def main():
     params = load_params("dataset_params.yaml")
 
-    model = full_map_cnn(params)
-    model.compile(tf.train.AdamOptimizer(learning_rate=0.001), loss='mse', metrics=["mae"])
+    model = FullMapCNN(params)
+    model.load_model("weights300")
 
-    epsilon = 0.9
+    epsilon = 0.7
     for i in range(100):
-        epsilon *= 0.9
-        position = (random.choice(range(params["num_rows"])),
-                    random.choice(range(params["num_cols"])))
+        #epsilon *= 0.92
+        t = random.choice([0, 1])
+        goals = [(5, 5)]
+        if t == 0:
+            position = (random.choice([0, params["num_rows"]-1]),
+                        random.choice(range(params["num_cols"])))
+        else:
+            position = (random.choice(range(params["num_rows"])),
+                        random.choice([0, params["num_cols"]-1]))
         robots = [position]
-        goals = [(8, 8)]
         grid = worlds.empty_with_robots_and_objects(params, robots, goals)
         env = MultiagentEnv(params, grid)
         robots = range(len(env.robots))
         pomdp = POMDP(env, params)
         count = 0
         env.render()
-        states = []
-        actions = []
-        rewards = []
         _, R = pomdp.build_mdp(env)
         prev_q = None
         prev_state = None
         prev_action = None
+        print(epsilon)
         while not env.done and count < env.params["max_iter"]: 
-            object_belief = pomdp.object_belief.reshape(pomdp.shape)
-            obstacle_belief = pomdp.obstacle_belief.reshape(pomdp.shape)
-
             for robot in robots:
-                robot_position = np.zeros_like(object_belief)
-                other_robots = np.zeros_like(object_belief)
-                goals = np.zeros_like(object_belief)
-                robot_position[env.robots[robot].position] = 1
-                for r in env.get_all_robots_positions_excluding(robot):
-                    other_robots[r] = 1
-                for g in [o.position for o in pomdp.env.objects]:
-                    goals[g] = 1
-                data = np.concatenate((object_belief[..., np.newaxis],  \
-                                      obstacle_belief[..., np.newaxis], \
-                                      robot_position[..., np.newaxis], \
-                                      other_robots[..., np.newaxis], \
-                                      goals[..., np.newaxis]), axis = -1)[np.newaxis, ...]
-                if bool(params["use_coords"]) == True:
-                    data = add_coords_to_data(data, params)
-
+                if params["use_local_data"]:
+                    data = get_local_data_as_matrix(robot, env, pomdp, params)
+                else:
+                    data = get_data_as_matrix(robot, env, pomdp, params)
+                data = data[np.newaxis, ...]
                 qs = model.predict(data)
-                print(qs)
-                print(epsilon)
+                #print(qs)
                 if random.random() < epsilon:
                     action = random.choice(range(4))
-                elif epsilon < 0.05:
-                    action = np.argmax(qs[0])
                 else:
                     action, _, _ = pomdp.get_optimal_action_for_robot(robot)
                 
                 if prev_q is not None:
                     next_max_q = np.max(qs)
                     prev_q[0, prev_action] = reward + params["gamma"] * next_max_q
-                    model.train_on_batch(prev_state, prev_q)
+                    model.train(prev_state, prev_q)
                 
                 prev_state = copy.deepcopy(data)
                 prev_q = copy.deepcopy(qs)
@@ -89,6 +75,8 @@ def main():
             
             count += 1
             env.render()
+
+    model.save_model("nakon_online")
 
 if __name__ == "__main__":
     main()

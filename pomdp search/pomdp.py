@@ -79,7 +79,7 @@ class POMDP:
             reward = R[action, s, s]
             #next_V = V[s]
         #q = reward + self.gamma * next_V
-        return action, reward, robot_goal_env
+        return action, V, robot_goal_env
 
     def build_mdp(self, env): 
         T = np.zeros((self.num_actions, self.num_states, self.num_states), 'f')
