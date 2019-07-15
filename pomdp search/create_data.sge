@@ -1,0 +1,6 @@
+#$ -N create_dataset
+#$ -cwd
+#$ -pe *mpi 12
+
+module load tensorflow/1-12-0-gpu
+python3.5 search_data.py

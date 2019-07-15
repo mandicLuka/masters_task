@@ -11,7 +11,7 @@ import worlds
 from time import sleep, clock
 from threading import Thread, Lock
 
-NUM_GENERATORS = 3
+NUM_GENERATORS = 10
 PARAMS_FILE_PATH = "dataset_params.yaml"
 
 def main():
