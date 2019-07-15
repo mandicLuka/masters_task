@@ -25,6 +25,7 @@ def main():
         #epsilon *= 0.92
         t = random.choice([0, 1])
         goals = [(5, 5)]
+        t = random.choice([0, 1])
         if t == 0:
             position = (random.choice([0, params["num_rows"]-1]),
                         random.choice(range(params["num_cols"])))

@@ -20,16 +20,23 @@ def main():
         
     train_pipeline = SingleStateDataPipeline(TRAIN_DIR, params, shuffle=True)
 
-    model = PolicyCNN(params)    
+    model = FullMapCNN(params)   
 
     old = 0
     while train_pipeline.num_passed < params["num_epochs"]:
-        states, actions, _, _, _ = train_pipeline.get_next_batch()
+        states, actions, rewards, returns, next_states = train_pipeline.get_next_batch()
 
-        labels = np.zeros((actions.shape[0], params["num_actions"]))
-        labels[:, actions] = 1
+        policy = model.predict(states)
+        action = np.argmax(policy, axis=-1)
+        prob = np.max(policy, axis=-1)
+        indices_Q = (range(data.shape[0]), next_state["actions"])
+        indices_A = (range(data.shape[0]), cache["actions"])
+        labels = model.predict(data)
+        labels[indices_A] = np.array(rewards, dtype="f") + \
+                          params["gamma"] * next_Q[indices_Q]
         
-        model.train(states, labels)
+        a = model.fit(data, labels, validation_split=0.1)
+        print(model.predict(data[:5]))
         if train_pipeline.num_passed > old:
             old = train_pipeline.num_passed
             model.save_weights("weights" + str(old))            

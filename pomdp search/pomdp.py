@@ -202,6 +202,11 @@ class POMDP:
         print("\n")
 
 
+    def get_maximum_return(self):
+        a = (self.visited == False).sum() * self.params["step_reward"]
+        b = self.num_objects * self.params["goal_reward"]
+        return a + b
+
 def plot_clusters(X, y, shape):
     x1 = deepcopy(X[:, 0])
     x2 = deepcopy([X[:, 1]])

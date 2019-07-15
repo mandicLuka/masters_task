@@ -1,6 +1,6 @@
 import tensorflow as tf
 import numpy as np
-from models import full_map_cnn, FullMapCNN
+from models import QCNN
 from utils import load_params
 import pickle
 import copy
@@ -21,11 +21,12 @@ def main():
         TEST_DIR = os.path.join(os.getcwd(), "Datasets", params["test_folder"])
     
  
-    model = FullMapCNN(params)
+    model = QCNN(params)
     model.load_model("weights300")
     actions = []
     optim_actions = []
     finished = 0
+    counts = []
     for i in range(400):
         goals = [(5, 5)]
         position = goals[0]
@@ -41,7 +42,7 @@ def main():
         env.render()
         robots = [0]
         _, R = pomdp.build_mdp(env) 
-        print(i)
+
         while not env.done and count < env.params["max_iter"]: 
             for robot in robots:
                 if params["use_local_data"]:
@@ -65,9 +66,12 @@ def main():
 
             count += 1
         if count < env.params["max_iter"]:
+            counts.append(count)
             finished += 1
         #print(np.mean(np.array(actions) == np.array(optim_actions)), finished)
-        print(finished)
+        print(i, finished)
+        print(np.mean(np.array(counts)))
+
 
 if __name__ == "__main__":
     main()

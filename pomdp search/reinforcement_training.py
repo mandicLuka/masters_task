@@ -11,7 +11,7 @@ import time, os
 from math import exp
 import tensorflow as tf
 from queue import Queue
-from models import full_map_cnn, FullMapCNN
+from models import QCNN
 import worlds
 from envs.multiagent_env import *
 from pomdp import POMDP
@@ -110,7 +110,7 @@ class ReinforcementAgent(Thread):
         self.gamma = self.params["gamma"]
         self.simulation_replays = simulation_replays
         self.ready = True
-        self.model = FullMapCNN(params)
+        self.model = QCNN(params)
 
     def get_batch(self):
         states = []
@@ -184,7 +184,7 @@ class ReinforcementTrainer(Thread):
         self.epsilon = params["epsilon"]
         self.epsilon_decay = params["epsilon_decay"]
         self.params = params
-        self.model = FullMapCNN(params)
+        self.model = QCNN(params)
         self.finished_task = False
 
     def train(self):
